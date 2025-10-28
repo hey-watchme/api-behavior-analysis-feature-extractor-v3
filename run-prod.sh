@@ -19,9 +19,25 @@ aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS 
 echo "📦 Pulling latest image from ECR..."
 docker pull ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
 
-# 既存のコンテナを停止・削除（存在する場合）
-echo "🛑 Stopping existing container (if any)..."
+# 既存のコンテナを停止・削除（v2とv3両方）
+echo "🛑 Stopping existing containers (if any)..."
+
+# v3のコンテナを停止（docker-compose管理）
 docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+
+# v2のコンテナを停止・削除（ast-api）
+echo "🛑 Stopping v2 container (ast-api) if exists..."
+docker stop ast-api 2>/dev/null || true
+docker rm -f ast-api 2>/dev/null || true
+
+# ポート8017を使用している全コンテナを確認・削除
+echo "🔍 Checking port 8017..."
+CONTAINERS_ON_8017=$(docker ps -q --filter "publish=8017")
+if [ ! -z "$CONTAINERS_ON_8017" ]; then
+    echo "⚠️ Found containers using port 8017, stopping..."
+    docker stop $CONTAINERS_ON_8017
+    docker rm -f $CONTAINERS_ON_8017
+fi
 
 # 環境変数ファイルの確認
 if [ ! -f .env ]; then
