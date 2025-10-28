@@ -1,0 +1,49 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 必要なシステムライブラリとcurlをインストール（ヘルスチェック用）
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    libgomp1 \
+    curl \
+    ffmpeg \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# requirements.txtをコピーしてパッケージをインストール
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ✅ PaSSTモデルをビルド時にプリロード（実行時のダウンロード時間を排除）
+# これにより、コンテナ起動時間が数分から数秒に短縮されます
+RUN python3 -c "\
+from hear21passt.base import get_basic_model, get_model_passt; \
+import torch; \
+print('🔧 PaSSTモデルをダウンロード中...'); \
+model = get_basic_model(mode='logits'); \
+print('✅ PaSSTモデルダウンロード完了'); \
+"
+
+# AudioSetラベルファイルをコピー
+COPY audioset_labels.json .
+
+# アプリケーションコードをコピー
+COPY main_supabase.py main.py
+COPY main.py main_simple.py
+
+# Python環境変数の設定
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# ポートを公開（PaSSTは8017で動作 - v2と同じ）
+EXPOSE 8017
+
+# ヘルスチェック設定（start_periodを60秒に設定：初回デプロイ時のモデルロードを考慮）
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8017/health || exit 1
+
+# アプリケーションの実行
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017", "--log-level", "info"]

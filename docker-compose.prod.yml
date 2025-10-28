@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  api:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-behavior-analysis-feature-extractor:latest
+    container_name: behavior-analysis-feature-extractor
+    ports:
+      - "127.0.0.1:8017:8017"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - AWS_REGION=${AWS_REGION}
+      - PYTHONUNBUFFERED=1
+    restart: always
+    networks:
+      watchme-network:
+        ipv4_address: 172.27.0.17
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8017/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # 初回デプロイ時のモデルロードを考慮
+    mem_limit: 2g
+    cpus: 1.0
+
+networks:
+  watchme-network:
+    external: true
