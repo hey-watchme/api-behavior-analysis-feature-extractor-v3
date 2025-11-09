@@ -200,28 +200,16 @@ curl -X POST "http://localhost:8017/fetch-and-process-paths" \
 **このエンドポイントの機能**:
 - ✅ S3からファイルをダウンロード
 - ✅ タイムライン分析を実行
-- ✅ Supabaseの`behavior_yamnet`テーブルに結果を保存
+- ✅ Supabaseの`audio_features`テーブルに結果を保存
+  - `behavior_extractor_result`: JSONB形式でタイムラインデータ
+  - `behavior_extractor_status`: 'completed'
+  - `behavior_extractor_processed_at`: 処理完了時刻
 - ✅ Supabaseの`audio_files`テーブルのステータスを更新
 - ✅ 複数ファイルの一括処理対応
 
 **使用場所**:
 - Lambda関数: `watchme-audio-worker`
 - エンドポイント: `/behavior-analysis/features/fetch-and-process-paths`
-
-## 🔄 v2からの移行
-
-### 完全な後方互換性
-- **同じポート番号**: 8017
-- **同じエンドポイント**: `/analyze_sound`, `/analyze_timeline`, `/fetch-and-process-paths`
-- **同じレスポンス形式**: v2と完全互換
-- **同じコンテナ名**: `behavior-analysis-feature-extractor-v2`（後方互換のため名前は維持）
-- **ECRリポジトリ**: `watchme-behavior-analysis-feature-extractor`
-
-### 移行手順
-1. ✅ **完了**: v3コードがGitHubにコミット済み
-2. ✅ **完了**: CI/CD設定完了（GitHub Actions）
-3. ✅ **完了**: Docker設定完了（Dockerfile.prod）
-4. ✅ **完了**: Supabase統合（main_supabase.py）
 
 ## 🐳 Docker対応（本番環境）
 
@@ -341,7 +329,7 @@ curl http://localhost:8017/health
 
 - ✅ **Supabase完全統合**（`fetch-and-process-paths`エンドポイント）
   - S3からのファイルダウンロード
-  - behavior_yamnetテーブルへのデータ保存
+  - audio_featuresテーブルへのデータ保存（behavior_extractor_result）
   - audio_filesテーブルのステータス更新
 - ✅ **CI/CD設定**（GitHub Actions）
   - 自動Dockerビルド（ARM64）
