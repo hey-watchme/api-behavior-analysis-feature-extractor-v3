@@ -1,6 +1,55 @@
-# PaSST Audio Event Detection API (v3)
+# Behavior Features API | PaSST Audio Event Detection (v3)
 
 **Patchout Spectrogram Transformer (PaSST)** を使用した高性能音響イベント検出API
+
+---
+
+## 🗺️ ルーティング詳細
+
+| 項目 | 値 | 説明 |
+|------|-----|------|
+| **🏷️ サービス名** | Behavior Features API | 音響イベント検出（527種類） |
+| **📦 モデル** | PaSST-S SWA | Patchout Spectrogram Transformer |
+| | | |
+| **🌐 外部アクセス（Nginx）** | | |
+| └ 公開エンドポイント | `https://api.hey-watch.me/behavior-analysis/features/` | Lambdaから呼ばれるパス |
+| └ Nginx設定ファイル | `/etc/nginx/sites-available/api.hey-watch.me` | 152-174行目 |
+| └ proxy_pass先 | `http://localhost:8017/` | 内部転送先 |
+| └ タイムアウト | 180秒 | read/connect/send |
+| | | |
+| **🔌 API内部エンドポイント** | | |
+| └ ヘルスチェック | `/health` | GET |
+| └ ファイル分析 | `/analyze_sound` | POST |
+| └ タイムライン分析 | `/analyze_timeline` | POST |
+| └ **S3統合（重要）** | `/fetch-and-process-paths` | POST - Lambdaが呼ぶ |
+| | | |
+| **🐳 Docker/コンテナ** | | |
+| └ コンテナ名 | `behavior-analysis-feature-extractor` | `docker ps`で表示される名前 |
+| └ ポート（内部） | 8017 | コンテナ内 |
+| └ ポート（公開） | `127.0.0.1:8017:8017` | ローカルホストのみ |
+| └ ヘルスチェック | `/health` | Docker healthcheck |
+| | | |
+| **☁️ AWS ECR** | | |
+| └ リポジトリ名 | `watchme-behavior-analysis-feature-extractor` | イメージ保存先 |
+| └ リージョン | ap-southeast-2 (Sydney) | |
+| └ URI | `754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-behavior-analysis-feature-extractor:latest` | |
+| | | |
+| **⚙️ systemd** | | |
+| └ サービス名 | `watchme-behavior-yamnet.service` | ※名前が不統一 |
+| └ 起動コマンド | `docker-compose up -d` | |
+| └ 自動起動 | enabled | サーバー再起動時に自動起動 |
+| | | |
+| **📂 ディレクトリ** | | |
+| └ ソースコード | `/Users/kaya.matsumoto/projects/watchme/api/behavior-analysis/feature-extractor-v3` | ローカル |
+| └ GitHubリポジトリ | `hey-watchme/api-behavior-analysis-feature-extractor-v3` | |
+| └ EC2配置場所 | Docker内部のみ（ディレクトリなし） | ECR経由デプロイ |
+| | | |
+| **🔗 呼び出し元** | | |
+| └ Lambda関数 | `watchme-audio-worker` | 30分ごと |
+| └ 呼び出しURL | `https://api.hey-watch.me/behavior-analysis/features/fetch-and-process-paths` | フルパス |
+| └ 環境変数 | `API_BASE_URL=https://api.hey-watch.me` | Lambda内 |
+
+---
 
 ## 🚀 v3の新機能とアップグレード内容
 

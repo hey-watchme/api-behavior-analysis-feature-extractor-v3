@@ -224,10 +224,10 @@ async def update_audio_files_status(file_path: str, status: str = 'completed'):
         print(f"❌ ステータス更新エラー: {str(e)}")
         return False
 
-async def save_to_behavior_yamnet(device_id: str, date: str, time_block: str,
+async def save_to_audio_features(device_id: str, date: str, time_block: str,
                                   timeline_data: List[Dict]):
     """
-    behavior_yamnetテーブルにタイムライン形式の結果を保存
+    audio_featuresテーブルにタイムライン形式の結果を保存
 
     Args:
         device_id: デバイスID
@@ -236,23 +236,23 @@ async def save_to_behavior_yamnet(device_id: str, date: str, time_block: str,
         timeline_data: タイムライン形式のイベントデータ
     """
     try:
-        created_at = datetime.now(timezone.utc).isoformat()
+        processed_at = datetime.now(timezone.utc).isoformat()
 
         data = {
             'device_id': device_id,
             'date': date,
             'time_block': time_block,
-            'events': timeline_data,
-            'status': 'completed',
-            'created_at': created_at
+            'behavior_extractor_result': timeline_data,  # JSONB形式
+            'behavior_extractor_status': 'completed',
+            'behavior_extractor_processed_at': processed_at
         }
 
-        response = supabase.table('behavior_yamnet') \
+        response = supabase.table('audio_features') \
             .upsert(data, on_conflict='device_id,date,time_block') \
             .execute()
 
         if response.data:
-            print(f"✅ データ保存成功: {device_id}/{date}/{time_block}")
+            print(f"✅ audio_features保存成功: {device_id}/{date}/{time_block}")
             return True
         else:
             print(f"⚠️ データ保存失敗: レスポンスが空です")
@@ -496,8 +496,8 @@ async def process_single_file(file_path: str, threshold: float = 0.1, top_k: int
             segment_duration, overlap, top_k, threshold
         )
 
-        # behavior_yamnetテーブルに保存
-        save_success = await save_to_behavior_yamnet(
+        # audio_featuresテーブルに保存
+        save_success = await save_to_audio_features(
             file_info['device_id'],
             file_info['date'],
             file_info['time_block'],
