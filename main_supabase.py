@@ -224,15 +224,14 @@ async def update_audio_files_status(file_path: str, status: str = 'completed'):
         print(f"❌ ステータス更新エラー: {str(e)}")
         return False
 
-async def save_to_audio_features(device_id: str, date: str, time_block: str,
-                                  timeline_data: List[Dict]):
+async def save_to_spot_features(device_id: str, recorded_at: str,
+                                 timeline_data: List[Dict]):
     """
-    audio_featuresテーブルにタイムライン形式の結果を保存
+    spot_featuresテーブルにタイムライン形式の結果を保存
 
     Args:
         device_id: デバイスID
-        date: 日付
-        time_block: 時間ブロック
+        recorded_at: 録音日時 (UTC timestamp)
         timeline_data: タイムライン形式のイベントデータ
     """
     try:
@@ -240,19 +239,18 @@ async def save_to_audio_features(device_id: str, date: str, time_block: str,
 
         data = {
             'device_id': device_id,
-            'date': date,
-            'time_block': time_block,
+            'recorded_at': recorded_at,
             'behavior_extractor_result': timeline_data,  # JSONB形式
             'behavior_extractor_status': 'completed',
             'behavior_extractor_processed_at': processed_at
         }
 
-        response = supabase.table('audio_features') \
-            .upsert(data, on_conflict='device_id,date,time_block') \
+        response = supabase.table('spot_features') \
+            .upsert(data) \
             .execute()
 
         if response.data:
-            print(f"✅ audio_features保存成功: {device_id}/{date}/{time_block}")
+            print(f"✅ spot_features保存成功: {device_id}/{recorded_at}")
             return True
         else:
             print(f"⚠️ データ保存失敗: レスポンスが空です")
@@ -472,8 +470,18 @@ async def process_single_file(file_path: str, threshold: float = 0.1, top_k: int
     """
     temp_file = None
     try:
-        # ファイル情報を抽出
-        file_info = extract_info_from_file_path(file_path)
+        # audio_filesテーブルからrecorded_atを取得
+        audio_file_response = supabase.table('audio_files') \
+            .select('device_id, recorded_at') \
+            .eq('file_path', file_path) \
+            .single() \
+            .execute()
+
+        if not audio_file_response.data:
+            return {"status": "error", "file_path": file_path, "error": "Audio file record not found"}
+
+        device_id = audio_file_response.data['device_id']
+        recorded_at = audio_file_response.data['recorded_at']
 
         # ステータスを処理中に更新
         await update_audio_files_status(file_path, 'processing')
@@ -496,11 +504,10 @@ async def process_single_file(file_path: str, threshold: float = 0.1, top_k: int
             segment_duration, overlap, top_k, threshold
         )
 
-        # audio_featuresテーブルに保存
-        save_success = await save_to_audio_features(
-            file_info['device_id'],
-            file_info['date'],
-            file_info['time_block'],
+        # spot_featuresテーブルに保存
+        save_success = await save_to_spot_features(
+            device_id,
+            recorded_at,
             timeline_result['timeline']
         )
 
@@ -509,9 +516,8 @@ async def process_single_file(file_path: str, threshold: float = 0.1, top_k: int
             return {
                 "status": "success",
                 "file_path": file_path,
-                "device_id": file_info['device_id'],
-                "date": file_info['date'],
-                "time_block": file_info['time_block'],
+                "device_id": device_id,
+                "recorded_at": recorded_at,
                 "timeline": timeline_result
             }
         else:
