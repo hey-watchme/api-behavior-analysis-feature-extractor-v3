@@ -183,20 +183,14 @@ def extract_info_from_file_path(file_path: str) -> Dict[str, str]:
     """
     parts = file_path.split('/')
 
-    if len(parts) >= 5:
+    if len(parts) >= 2:
         device_id = parts[1]
-        date = parts[2]
-        time_block = parts[3]
         return {
-            'device_id': device_id,
-            'date': date,
-            'time_block': time_block
+            'device_id': device_id
         }
     else:
         return {
-            'device_id': 'unknown',
-            'date': 'unknown',
-            'time_block': 'unknown'
+            'device_id': 'unknown'
         }
 
 async def update_audio_files_status(file_path: str, status: str = 'completed'):
@@ -584,7 +578,6 @@ async def fetch_and_process_paths(request: FetchAndProcessPathsRequest):
 
     processed_files = []
     error_files = []
-    processed_time_blocks = set()
 
     print(f"🚀 処理開始: {len(request.file_paths)}個のファイル")
 
@@ -600,7 +593,6 @@ async def fetch_and_process_paths(request: FetchAndProcessPathsRequest):
 
         if result["status"] == "success":
             processed_files.append(file_path)
-            processed_time_blocks.add(result["time_block"])
         else:
             error_files.append({
                 "file_path": file_path,
@@ -621,7 +613,6 @@ async def fetch_and_process_paths(request: FetchAndProcessPathsRequest):
             "errors": error_count
         },
         "processed_files": processed_files,
-        "processed_time_blocks": list(processed_time_blocks),
         "error_files": error_files if error_files else None,
         "execution_time_seconds": round(execution_time, 1),
         "message": f"{total_files}件中{success_count}件を正常に処理しました"
