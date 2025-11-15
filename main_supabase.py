@@ -231,9 +231,31 @@ async def save_to_spot_features(device_id: str, recorded_at: str,
     try:
         processed_at = datetime.now(timezone.utc).isoformat()
 
+        # Get local_date and local_time from audio_files table
+        local_date = None
+        local_time = None
+        try:
+            audio_file_response = supabase.table('audio_files').select('local_date, local_time').eq(
+                'device_id', device_id
+            ).eq(
+                'recorded_at', recorded_at
+            ).execute()
+
+            if audio_file_response.data and len(audio_file_response.data) > 0:
+                local_date = audio_file_response.data[0].get('local_date')
+                local_time = audio_file_response.data[0].get('local_time')
+                print(f"Retrieved local_date from audio_files: {local_date}")
+                print(f"Retrieved local_time from audio_files: {local_time}")
+            else:
+                print(f"⚠️ No audio_files record found for device_id={device_id}, recorded_at={recorded_at}")
+        except Exception as e:
+            print(f"❌ Error fetching local_date/local_time from audio_files: {e}")
+
         data = {
             'device_id': device_id,
             'recorded_at': recorded_at,
+            'local_date': local_date,  # Local date from audio_files
+            'local_time': local_time,  # Local time from audio_files
             'behavior_extractor_result': timeline_data,  # JSONB形式
             'behavior_extractor_status': 'completed',
             'behavior_extractor_processed_at': processed_at
