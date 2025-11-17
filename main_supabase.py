@@ -256,9 +256,7 @@ async def save_to_spot_features(device_id: str, recorded_at: str,
             'recorded_at': recorded_at,
             'local_date': local_date,  # Local date from audio_files
             'local_time': local_time,  # Local time from audio_files
-            'behavior_extractor_result': timeline_data,  # JSONB形式
-            'behavior_extractor_status': 'completed',
-            'behavior_extractor_processed_at': processed_at
+            'behavior_extractor_result': timeline_data  # JSONB形式
         }
 
         response = supabase.table('spot_features') \
