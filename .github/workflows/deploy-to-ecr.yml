@@ -1,4 +1,4 @@
-# PaSST Audio Event Detection API (v3) - ECR & EC2 自動デプロイワークフロー
+# AST Audio Event Detection API (v3) - ECR & EC2 Auto Deployment Workflow
 name: Deploy to Amazon ECR and EC2
 
 # このワークフローが実行されるタイミング
@@ -79,7 +79,7 @@ jobs:
         echo "📦 Repository: ${{ env.ECR_REPOSITORY }}"
         echo "🏷️ Image Tag: ${{ github.sha }}"
         echo "📍 Region: ${{ env.AWS_REGION }}"
-        echo "🎯 Model: PaSST-S SWA (v3) - 32kHz sampling rate"
+        echo "🎯 Model: AST (v3) - 16kHz sampling rate"
         echo ""
         echo "📋 Next Steps:"
         echo "1. SSH to EC2: ssh -i ~/watchme-key.pem ubuntu@3.24.16.82"

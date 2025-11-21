@@ -1,9 +1,9 @@
 #!/bin/bash
-# PaSST Audio Event Detection API (v3) - 本番環境デプロイスクリプト
+# AST Audio Event Detection API (v3) - Production deployment script
 
-set -e  # エラーが発生したら即座に終了
+set -e  # Exit on error
 
-echo "🚀 Starting PaSST Audio Event Detection API (v3) deployment..."
+echo "🚀 Starting AST Audio Event Detection API (v3) deployment..."
 
 # 環境変数の設定
 export AWS_REGION="ap-southeast-2"
@@ -86,7 +86,7 @@ if docker ps | grep -q ${CONTAINER_NAME}; then
         echo "⚠️ Health check failed, but container is running"
     fi
 
-    # コンテナログの最後の20行を表示（PaSSTモデルロード確認のため）
+    # Display last 20 lines of container logs (verify AST model loading)
     echo "📋 Recent container logs:"
     docker logs --tail 20 ${CONTAINER_NAME}
 else
@@ -103,4 +103,4 @@ docker image prune -f
 echo "✅ Deployment completed successfully!"
 echo "🌐 API is available at: https://api.hey-watch.me/behavior-analysis/features/"
 echo "📍 Health endpoint: https://api.hey-watch.me/behavior-analysis/features/health"
-echo "🎯 Model: PaSST-S SWA (v3) - 32kHz sampling rate"
+echo "🎯 Model: AST (v3) - 16kHz sampling rate"

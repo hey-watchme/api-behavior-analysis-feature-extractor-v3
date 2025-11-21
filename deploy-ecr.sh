@@ -12,7 +12,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🚀 PaSST Audio Event Detection API (v3) - ECRデプロイ開始${NC}"
+echo -e "${GREEN}🚀 AST Audio Event Detection API (v3) - ECRデプロイ開始${NC}"
 echo "=================================="
 
 # 1. ECRにログイン
