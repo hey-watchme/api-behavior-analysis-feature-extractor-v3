@@ -64,6 +64,9 @@ from botocore.exceptions import ClientError
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+# Import event filter
+from event_filter import get_event_filter
+
 # 環境変数を読み込み
 load_dotenv()
 
@@ -336,7 +339,7 @@ def process_audio_for_passt(audio_data: np.ndarray, sample_rate: int) -> torch.T
 def predict_audio_events(audio_tensor: torch.Tensor, top_k: int = 5,
                         threshold: float = 0.1) -> List[Dict]:
     """
-    音声データから音響イベントを予測
+    音声データから音響イベントを予測（フィルタリング適用）
 
     Args:
         audio_tensor: PaSST用に処理済みのTensor
@@ -344,7 +347,7 @@ def predict_audio_events(audio_tensor: torch.Tensor, top_k: int = 5,
         threshold: 最小確率しきい値
 
     Returns:
-        予測結果のリスト
+        予測結果のリスト（フィルタリング済み）
     """
     global model, device
 
@@ -373,7 +376,11 @@ def predict_audio_events(audio_tensor: torch.Tensor, top_k: int = 5,
                 "score": round(float(prob), 4)
             })
 
-    return predictions
+    # Apply event filtering
+    event_filter = get_event_filter()
+    filtered_predictions = event_filter.filter_events(predictions)
+
+    return filtered_predictions
 
 def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
                     segment_duration: float = 10.0,

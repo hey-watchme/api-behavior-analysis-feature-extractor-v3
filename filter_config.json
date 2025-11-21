@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "model": "passt_s_swa_p16_128_ap476",
+  "updated_at": "2025-11-21",
+  "description": "Filter configuration for PaSST behavior event detection. Removes false positives based on score thresholds.",
+
+  "global_threshold": 0.1,
+
+  "label_specific_thresholds": {
+    "Domestic animals / 家畜・ペット": 0.3,
+    "Crumpling, crinkling / しわくちゃ": 0.3,
+    "Cash register / レジ": 0.3,
+    "Dog / 犬": 0.3,
+    "Purr / ゴロゴロ音": 0.3,
+    "Rub / 擦る音": 0.3,
+    "Sheep / 羊": 0.3,
+    "Buzz / ブンブン音": 0.3,
+    "Crow / コケコッコー": 0.3,
+    "Bird vocalization / 鳥の鳴き声": 0.3,
+    "Chirp / チュンチュン": 0.3,
+    "Machine gun / 機関銃": 0.3,
+    "Gunshot / 銃声": 0.3,
+    "Bow-wow / ワンワン": 0.3,
+    "Field recording / フィールド録音": 0.3,
+    "Trickle / ちょろちょろ": 0.3,
+    "Eruption / 噴火": 0.3,
+    "Gobble / 七面鳥の鳴き声": 0.3
+  },
+
+  "notes": {
+    "label_specific_thresholds": "Labels with score below the specified threshold will be filtered out (likely false positives)",
+    "global_threshold": "Minimum score for all events (applied first before label-specific thresholds)"
+  }
+}
