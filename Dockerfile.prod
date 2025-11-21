@@ -16,14 +16,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# ✅ PaSSTモデルをビルド時にプリロード（実行時のダウンロード時間を排除）
-# これにより、コンテナ起動時間が数分から数秒に短縮されます
+# Preload AST model at build time to reduce container startup time
 RUN python3 -c "\
-from hear21passt.base import get_basic_model, get_model_passt; \
+from transformers import AutoFeatureExtractor, ASTForAudioClassification; \
 import torch; \
-print('🔧 PaSSTモデルをダウンロード中...'); \
-model = get_basic_model(mode='logits'); \
-print('✅ PaSSTモデルダウンロード完了'); \
+print('Loading AST model...'); \
+model = ASTForAudioClassification.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593'); \
+feature_extractor = AutoFeatureExtractor.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593'); \
+print('AST model loaded successfully'); \
 "
 
 # AudioSetラベルファイルをコピー
@@ -38,10 +38,10 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# ポートを公開（PaSSTは8017で動作 - v2と同じ）
+# Expose port (AST runs on 8017 - same as v2)
 EXPOSE 8017
 
-# ヘルスチェック設定（start_periodを60秒に設定：初回デプロイ時のモデルロードを考慮）
+# Health check (start_period=60s for initial model loading)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8017/health || exit 1
 
