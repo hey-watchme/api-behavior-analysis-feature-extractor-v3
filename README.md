@@ -1,6 +1,8 @@
-# Behavior Features API | PaSST Audio Event Detection (v3)
+# Behavior Features API | AST Audio Event Detection (v3)
 
-**Patchout Spectrogram Transformer (PaSST)** を使用した高性能音響イベント検出API
+**Audio Spectrogram Transformer (AST)** を使用した音響イベント検出API
+
+> **モデル変更履歴**: 2024-10 PaSST導入 → 2025-11-21 **ASTに戻す**（感情イベント検出精度向上のため）
 
 ---
 
@@ -9,7 +11,7 @@
 | 項目 | 値 | 説明 |
 |------|-----|------|
 | **🏷️ サービス名** | Behavior Features API | 音響イベント検出（527種類） |
-| **📦 モデル** | PaSST-S SWA | Patchout Spectrogram Transformer |
+| **📦 モデル** | AST | Audio Spectrogram Transformer (MIT) |
 | | | |
 | **🌐 外部アクセス（Nginx）** | | |
 | └ 公開エンドポイント | `https://api.hey-watch.me/behavior-analysis/features/` | Lambdaから呼ばれるパス |
@@ -51,50 +53,44 @@
 
 ---
 
-## 🚀 v3の新機能とアップグレード内容
+## 🎯 現在使用中のモデル: AST
 
-### モデルアップグレード: AST → PaSST
-- **従来（v2）**: AST (Audio Spectrogram Transformer)
-- **新版（v3）**: **PaSST** (Patchout Spectrogram Transformer)
+### モデル情報
+- **モデル名**: `MIT/ast-finetuned-audioset-10-10-0.4593`
+- **開発元**: MIT CSAIL
+- **精度 (mAP)**: 0.459
+- **サンプリングレート**: 16kHz
+- **ライセンス**: Apache-2.0（商用利用可能）
+- **ライブラリ**: transformers (Hugging Face)
 
-### 主な改善点
-| 項目 | v2 (AST) | v3 (PaSST) | 改善率 |
-|------|----------|------------|--------|
-| **精度 (mAP)** | 0.459 | **0.476** | +3.7% |
-| **サンプリングレート** | 16kHz | **32kHz** | 2倍 |
-| **メモリ使用量** | 基準 | **約1/10** | -90% |
-| **処理速度** | 基準 | **高速化** | Patchout効果 |
-| **商用利用** | MIT License | Apache-2.0 | ✅ 両方OK |
+### ASTの特徴・強み
 
-### 🎵 重要: サンプリングレートの違い
+#### ✅ 実運用での優位性
+- **Speech detection**: 非常に高精度
+- **Laughter detection**: 優秀（感情分析に重要）
+- **Cough detection**: 優秀（健康状態の指標）
+- **人間の感情イベント全般**: 実績が豊富
 
-**v2 (AST) と v3 (PaSST) の最も重要な違い**
+#### 技術仕様
+- **アーキテクチャ**: Vision Transformer (ViT) のオーディオ版
+- **学習データ**: AudioSet (200万件の音声、527クラス)
+- **パラメータ数**: 約86M
+- **Transformer層**: 12 layers
+- **入力形式**: Mel-spectrogram (128 bins)
 
-| モデル | サンプリングレート | 説明 |
-|--------|-------------------|------|
-| **v2 (AST)** | **16kHz (16000 Hz)** | CD音質の約1/3 |
-| **v3 (PaSST)** | **32kHz (32000 Hz)** | **v2の2倍** - より高周波数帯域を捉える |
+#### コミュニティ・実績
+- ✅ Hugging Faceで最も人気のAudioSetモデル（ダウンロード数50,000+）
+- ✅ 多くの研究・プロダクトで採用実績あり
+- ✅ ドキュメント・サンプルコードが充実
 
-#### なぜ32kHzなのか？
+### 🔄 PaSSTからASTへ戻した理由（2025-11-21）
 
-1. **学習データの違い**: PaSSTモデルは学習時に32kHzの音声データで訓練されています
-2. **精度向上**: 32kHzにより、より高周波数帯域の音響特徴（子音、環境音など）を正確に捉えられます
-3. **互換性**: 入力音声が何Hzであっても、APIが自動的に32kHzにリサンプリングします
+**感情イベント検出精度の優先**:
+- PaSSTは全体的なmAP（0.476）は高いが、Speech/Laughter/Coughなど**人間の感情イベント検出**でASTに劣る
+- WatchMeのユースケースでは感情イベント検出が最優先
+- 実績のあるASTモデルに戻すことで、より確実な検出を実現
 
-#### ユーザー側の影響
-
-✅ **対応不要**: APIインターフェースは変更なし
-✅ **自動変換**: 8kHz、16kHz、44.1kHz、48kHzなど、どの音声でも自動的に32kHzに変換
-✅ **処理時間**: リサンプリングのオーバーヘッドは軽微（ほぼ影響なし）
-✅ **精度向上**: 結果として音響イベント検出精度が向上 (mAP 0.459 → 0.476)
-
-## 📊 PaSSTの特徴
-
-### 技術的優位性
-- **Patchout技術**: 学習時に一部パッチを除去することで効率化
-- **SWA (Stochastic Weight Averaging)**: より安定した予測
-- **高効率**: GPUメモリ使用量を大幅削減しながら精度向上
-- **527種類**の音響イベント検出（AudioSetベース）
+**検出可能な527種類**の音響イベント（AudioSetベース）
 
 ## 🔧 セットアップ
 
@@ -155,11 +151,11 @@ curl http://localhost:8017/health
 {
   "status": "healthy",
   "model_loaded": true,
-  "model": "PaSST-S SWA (passt_s_swa_p16_128_ap476)",
-  "device": "cpu",
+  "model_name": "MIT/ast-finetuned-audioset-10-10-0.4593",
+  "sampling_rate": 16000,
   "version": "3.0.0",
   "supabase_connected": true,
-  "s3_configured": true
+  "s3_connected": true
 }
 ```
 
@@ -227,7 +223,7 @@ git push origin main
 
 # 以降は自動実行される：
 # 1. GitHub Actionsが起動
-# 2. Dockerイメージをビルド（ARM64、PaSSTモデルプリロード）
+# 2. Dockerイメージをビルド（ARM64、ASTモデルプリロード）
 # 3. ECRへプッシュ
 # 4. EC2に設定ファイルをコピー
 # 5. .envファイルを自動作成/更新
@@ -247,12 +243,12 @@ git push origin main
 
 ```bash
 # ローカルテスト用のビルド
-docker build -f Dockerfile.prod -t passt-api:local .
+docker build -f Dockerfile.prod -t ast-api:local .
 
 # ローカルで起動
 docker run -p 8017:8017 \
   --env-file .env \
-  passt-api:local
+  ast-api:local
 ```
 
 ### EC2での確認コマンド
@@ -271,14 +267,15 @@ docker logs behavior-analysis-feature-extractor-v2 --tail 100
 curl http://localhost:8017/health
 ```
 
-## 📈 パフォーマンス比較
+## 📈 パフォーマンス
 
-### ベンチマーク結果（1分間の音声）
-| 指標 | AST (v2) | PaSST (v3) |
-|------|----------|------------|
-| 処理時間 | ~30秒 | **~25秒** |
-| メモリ使用量 | 2GB | **200MB** |
-| 検出精度 | Good | **Better** |
+### 処理性能（1分間の音声）
+| 指標 | 値 |
+|------|-----|
+| 処理時間 | ~30秒 |
+| メモリ使用量 | ~2GB |
+| サンプリングレート | 16kHz |
+| 検出精度 (mAP) | 0.459 |
 
 ## 🎯 検出可能な音響イベント（主要カテゴリ）
 
@@ -308,40 +305,56 @@ curl http://localhost:8017/health
 
 ## 🔬 技術仕様
 
-- **モデル**: PaSST-S SWA (passt_s_swa_p16_128_ap476)
-- **アーキテクチャ**: Patchout Spectrogram Transformer
-- **入力**: 32kHz サンプリングレート（自動リサンプリング対応）
+- **モデル**: MIT/ast-finetuned-audioset-10-10-0.4593
+- **アーキテクチャ**: Vision Transformer (ViT) for Audio
+- **入力**: 16kHz サンプリングレート（自動リサンプリング対応）
 - **出力**: 527クラスの確率分布
-- **フレームワーク**: PyTorch + Timm
+- **フレームワーク**: PyTorch + Transformers (Hugging Face)
 
 ## 📝 ライセンス
 
 - **コード**: Apache-2.0 License
 - **モデル**: Apache-2.0 License（商用利用可能）
-- **参考論文**: "Efficient Training of Audio Transformers with Patchout" (INTERSPEECH 2022)
+- **参考論文**: "AST: Audio Spectrogram Transformer" (2021)
 
 ## 🙏 謝辞
 
-- PaSST開発者: Khaled Koutini, Gerhard Widmer (JKU, Austria)
-- GitHub: https://github.com/kkoutini/PaSST
+- AST開発者: Yuan Gong, Yu-An Chung, James Glass (MIT CSAIL)
+- Hugging Face: https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593
 
 ## ✅ 実装完了済み
 
 - ✅ **Supabase完全統合**（`fetch-and-process-paths`エンドポイント）
   - S3からのファイルダウンロード
-  - audio_featuresテーブルへのデータ保存（behavior_extractor_result）
+  - spot_featuresテーブルへのデータ保存（behavior_extractor_result）
   - audio_filesテーブルのステータス更新
 - ✅ **CI/CD設定**（GitHub Actions）
   - 自動Dockerビルド（ARM64）
   - ECRへの自動プッシュ
   - EC2への自動デプロイ
   - ヘルスチェック実行
-- ✅ **PaSSTモデルのプリロード**（起動時間を数秒に短縮）
-- ✅ **v2との完全な後方互換性**
+- ✅ **ASTモデルのプリロード**（起動時間を数秒に短縮）
+- ✅ **感情イベント検出に最適化**（Speech, Laughter, Cough）
+
+## 📄 関連ドキュメント
+
+### SED モデル比較・選定ガイド
+**→ [SED_MODEL_COMPARISON.md](./SED_MODEL_COMPARISON.md)**
+
+v2 (AST) と v3 (PaSST) の詳細比較、最新モデル候補（BEATs, HTS-ATなど）の情報をまとめた資料です。モデル切り替えを検討する際は必ずこのドキュメントを参照してください。
+
+**内容**:
+- v2 (AST) と v3 (PaSST) の技術仕様・性能比較
+- 実運用での検出精度（Speech, Laughter, Coughなど）
+- 2024-2025年の最新モデル候補（BEATs, HTS-AT, Audio-MAE）
+- ネット上の評判・コミュニティの評価
+- モデル切り替え作業の見積もり
+- 今後の検証ロードマップ
 
 ## 🚧 今後の実装予定
 
-- [ ] AudioSetラベルの完全版追加（527クラス → 現在は主要クラスのみ）
+- [ ] **フィルタリング機能の再実装**（AST用のラベル閾値設定）
+- [ ] AudioSetラベルの日本語翻訳追加
 - [ ] バッチ処理の最適化
 - [ ] GPU対応の強化
 - [ ] モニタリングダッシュボード（CloudWatch統合）
