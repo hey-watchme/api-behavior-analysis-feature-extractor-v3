@@ -1,22 +1,22 @@
-# PaSST Audio Event Detection API Requirements
+# AST Audio Event Detection API Requirements
 # Core dependencies
-hear21passt==0.0.26
+transformers>=4.36.0
 torch>=2.0.0
 torchaudio>=2.0.0
 librosa>=0.10.0
-soundfile>=0.12.1
+soundfile>=0.12.0
 numpy>=1.24.0
 
 # Web framework
-fastapi>=0.100.0
-uvicorn[standard]>=0.23.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
 
 # AWS and database
-boto3>=1.28.0
-supabase>=1.0.3
+boto3>=1.26.0
+botocore>=1.29.0
+supabase>=2.0.0
 python-dotenv>=1.0.0
 
 # Audio processing
 scipy>=1.11.0
-resampy>=0.4.2

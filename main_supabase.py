@@ -1,36 +1,11 @@
 #!/usr/bin/env python3
 """
-PaSST (Patchout Spectrogram Transformer) 音響イベント検出API - Supabase統合版
-file_pathsベースの処理でaudio_filesテーブルと連携
+AST (Audio Spectrogram Transformer) Sound Event Detection API - Supabase Integration
+file_paths-based processing with audio_files table integration
 
-=============================================================================
-🔊 重要: サンプリングレートの違い (v2 AST → v3 PaSST)
-=============================================================================
-
-【v2 (AST)】
-- サンプリングレート: 16kHz (16000 Hz)
-- モデル: MIT/ast-finetuned-audioset-10-10-0.4593
-- ライブラリ: transformers (Hugging Face)
-
-【v3 (PaSST)】
-- サンプリングレート: 32kHz (32000 Hz) ⚠️ v2の2倍
-- モデル: passt_s_swa_p16_128_ap476
-- ライブラリ: hear21passt
-
-【なぜ32kHzなのか？】
-PaSSTモデルは学習時に32kHzの音声データで訓練されているため、
-推論時も32kHzにリサンプリングする必要があります。
-
-【影響範囲】
-- 入力音声が何Hzであっても、内部で自動的に32kHzにリサンプリングされます
-- ユーザー側で特別な対応は不要（APIインターフェースは変更なし）
-- 処理時間はほぼ同じ（リサンプリングのオーバーヘッドは軽微）
-
-【精度向上】
-32kHzにより、より高周波数帯域の音響特徴を捉えることができ、
-結果として音響イベント検出精度が向上しています (mAP 0.459 → 0.476)
-
-=============================================================================
+Model: MIT/ast-finetuned-audioset-10-10-0.4593
+Sampling Rate: 16kHz
+Library: transformers (Hugging Face)
 """
 
 import os
@@ -41,44 +16,36 @@ import traceback
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
 import time
-import ssl
-
-# SSL証明書の検証を無効化（開発環境のみ）
-ssl._create_default_https_context = ssl._create_unverified_context
-os.environ['PYTHONHTTPSVERIFY'] = '0'
 
 import torch
 import numpy as np
 import librosa
 import soundfile as sf
-from hear21passt.base import get_basic_model
+from transformers import AutoFeatureExtractor, ASTForAudioClassification
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-# AWS S3とSupabase
+# AWS S3 and Supabase
 import boto3
 from botocore.exceptions import ClientError
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Import event filter
-from event_filter import get_event_filter
-
-# 環境変数を読み込み
+# Load environment variables
 load_dotenv()
 
-# グローバル変数でモデルを保持
+# Global variables for model
 model = None
-device = None
-labels_map = None  # AudioSetラベルマッピング
+feature_extractor = None
+id2label = None
 
-# モデル情報
-MODEL_NAME = "PaSST-S SWA (passt_s_swa_p16_128_ap476)"
-MODEL_DESCRIPTION = "Patchout Spectrogram Transformer - AudioSet (mAP: 0.476)"
-SAMPLING_RATE = 32000  # ⚠️ v2の16kHzから32kHzに変更
+# Model information
+MODEL_NAME = "MIT/ast-finetuned-audioset-10-10-0.4593"
+MODEL_DESCRIPTION = "Audio Spectrogram Transformer - AudioSet (mAP: 0.459)"
+SAMPLING_RATE = 16000
 
 # Supabaseクライアントの初期化
 supabase_url = os.getenv('SUPABASE_URL')
@@ -107,10 +74,10 @@ s3_client = boto3.client(
 )
 print(f"✅ AWS S3接続設定完了: バケット={s3_bucket_name}, リージョン={aws_region}")
 
-# FastAPIアプリケーション
+# FastAPI application
 app = FastAPI(
-    title="PaSST Audio Event Detection API with Supabase",
-    description="Patchout Spectrogram Transformer を使用した音響イベント検出API（Supabase統合版）- v3",
+    title="AST Audio Event Detection API with Supabase",
+    description="Audio Spectrogram Transformer for sound event detection (Supabase integration) - v3",
     version="3.0.0"
 )
 
@@ -132,45 +99,32 @@ class FetchAndProcessPathsRequest(BaseModel):
     segment_duration: Optional[float] = 10.0  # 10秒が最適
     overlap: Optional[float] = 0.0  # オーバーラップなしが最適
 
-def load_audioset_labels():
-    """AudioSetラベルマッピングをJSONから読み込む"""
-    global labels_map
-
-    try:
-        labels_file = os.path.join(os.path.dirname(__file__), 'audioset_labels.json')
-        with open(labels_file, 'r', encoding='utf-8') as f:
-            labels_map = json.load(f)
-        print(f"✅ AudioSetラベル読み込み完了: {len(labels_map)}クラス")
-    except Exception as e:
-        print(f"⚠️ AudioSetラベルファイルが見つかりません: {str(e)}")
-        labels_map = {}
-
 def load_model():
-    """PaSSTモデルを読み込む"""
-    global model, device
+    """Load AST model and feature extractor"""
+    global model, feature_extractor, id2label
 
-    print(f"🔄 モデルをロード中: {MODEL_NAME}")
+    print(f"🔄 Loading model: {MODEL_NAME}")
     try:
-        # PaSSTモデルの読み込み（logitsモード = 527クラス分類）
-        model = get_basic_model(mode="logits")
+        feature_extractor = AutoFeatureExtractor.from_pretrained(MODEL_NAME)
+        model = ASTForAudioClassification.from_pretrained(MODEL_NAME)
 
-        # デバイスの設定
+        # Get label mapping
+        id2label = model.config.id2label
+
+        # Set device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = model.to(device)
+        model.to(device)
         model.eval()
 
-        print(f"✅ モデルのロードに成功しました")
-        print(f"   - モデル: {MODEL_NAME}")
-        print(f"   - デバイス: {device}")
-        print(f"   - クラス数: 527 (AudioSet)")
-        print(f"   - サンプリングレート: {SAMPLING_RATE} Hz (32kHz)")
-        print(f"   - 性能: mAP 0.476 (AudioSet)")
-
-        # ラベルマッピングを読み込む
-        load_audioset_labels()
+        print(f"✅ Model loaded successfully")
+        print(f"   - Model: {MODEL_NAME}")
+        print(f"   - Device: {device}")
+        print(f"   - Classes: {len(id2label)} (AudioSet)")
+        print(f"   - Sampling Rate: {SAMPLING_RATE} Hz (16kHz)")
+        print(f"   - Performance: mAP 0.459 (AudioSet)")
 
     except Exception as e:
-        print(f"❌ モデルのロードに失敗しました: {str(e)}")
+        print(f"❌ Failed to load model: {str(e)}")
         traceback.print_exc()
         raise
 
@@ -296,91 +250,89 @@ def download_from_s3(file_path: str, local_path: str) -> bool:
         print(f"❌ 予期しないエラー: {str(e)}")
         return False
 
-def process_audio_for_passt(audio_data: np.ndarray, sample_rate: int) -> torch.Tensor:
+def process_audio(audio_data: np.ndarray, sample_rate: int) -> np.ndarray:
     """
-    音声データをPaSST用に前処理
-
-    ⚠️ 重要: PaSSTは32kHzの音声を期待します（v2のASTは16kHz）
+    Preprocess audio data for AST model
 
     Args:
-        audio_data: 音声データ
-        sample_rate: 元のサンプリングレート
+        audio_data: Audio data (numpy array)
+        sample_rate: Original sampling rate
 
     Returns:
-        PaSST用に処理されたTensor
+        Processed audio data
     """
-    # モノラルに変換
+    # Convert to mono
     if len(audio_data.shape) > 1:
         audio_data = np.mean(audio_data, axis=1)
 
-    # PaSSTが期待する32kHzにリサンプリング
-    if sample_rate != SAMPLING_RATE:
+    # Resample to model's expected sampling rate (16kHz)
+    target_sr = feature_extractor.sampling_rate
+    if sample_rate != target_sr:
         audio_data = librosa.resample(
-            y=audio_data,
+            audio_data,
             orig_sr=sample_rate,
-            target_sr=SAMPLING_RATE
+            target_sr=target_sr
         )
-        print(f"🔄 リサンプリング: {sample_rate}Hz → {SAMPLING_RATE}Hz")
 
-    # float32に変換
+    # Convert to float32
     if audio_data.dtype != np.float32:
         audio_data = audio_data.astype(np.float32)
 
-    # 正規化（-1.0 〜 1.0）
+    # Normalize (-1.0 to 1.0)
     max_val = np.max(np.abs(audio_data))
     if max_val > 0:
         audio_data = audio_data / max_val
 
-    # Tensorに変換（バッチ次元を追加）
-    audio_tensor = torch.from_numpy(audio_data).unsqueeze(0)
+    return audio_data
 
-    return audio_tensor
-
-def predict_audio_events(audio_tensor: torch.Tensor, top_k: int = 5,
+def predict_audio_events(audio_data: np.ndarray, top_k: int = 5,
                         threshold: float = 0.1) -> List[Dict]:
     """
-    音声データから音響イベントを予測（フィルタリング適用）
+    Predict audio events from audio data
 
     Args:
-        audio_tensor: PaSST用に処理済みのTensor
-        top_k: 返す上位予測の数
-        threshold: 最小確率しきい値
+        audio_data: Preprocessed audio data
+        top_k: Number of top predictions to return
+        threshold: Minimum probability threshold
 
     Returns:
-        予測結果のリスト（フィルタリング済み）
+        List of predicted events
     """
-    global model, device
+    # Extract features
+    inputs = feature_extractor(
+        audio_data,
+        sampling_rate=feature_extractor.sampling_rate,
+        return_tensors="pt"
+    )
 
-    # デバイスに転送
-    audio_tensor = audio_tensor.to(device)
+    # Move to device
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    # 推論実行
+    # Run inference
     with torch.no_grad():
-        logits = model(audio_tensor)
+        outputs = model(**inputs)
+        logits = outputs.logits
 
-    # Softmaxで確率に変換
-    probs = torch.softmax(logits, dim=-1)
+    # Convert to probabilities
+    probs = torch.nn.functional.softmax(logits, dim=-1)[0]
 
-    # Top-kの予測を取得
-    top_probs, top_indices = torch.topk(probs[0], min(top_k, 527))
+    # Get top-k predictions
+    top_probs, top_indices = torch.topk(probs, min(top_k, len(probs)))
 
-    # 結果をリスト化
+    # Format results
     predictions = []
-    for idx, prob in zip(top_indices.cpu().numpy(), top_probs.cpu().numpy()):
-        if prob >= threshold:
-            class_id = str(int(idx))
-            # ラベルマッピングから取得（なければClass_XXX形式）
-            label = labels_map.get(class_id, f"Class_{class_id}")
+    for prob, idx in zip(top_probs.cpu(), top_indices.cpu()):
+        score = prob.item()
+        if score >= threshold:
+            label_id = idx.item()
+            label = id2label.get(label_id) or id2label.get(str(label_id)) or f"Event_{label_id}"
             predictions.append({
                 "label": label,
-                "score": round(float(prob), 4)
+                "score": round(score, 4)
             })
 
-    # Apply event filtering
-    event_filter = get_event_filter()
-    filtered_predictions = event_filter.filter_events(predictions)
-
-    return filtered_predictions
+    return predictions
 
 def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
                     segment_duration: float = 10.0,
@@ -388,44 +340,34 @@ def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
                     top_k: int = 3,
                     threshold: float = 0.1) -> Dict:
     """
-    音声データを時系列で分析
+    Analyze audio data in timeline segments
 
     Args:
-        audio_data: 音声データ
-        sample_rate: サンプリングレート
-        segment_duration: セグメントの長さ（秒）- デフォルト10秒が最適
-        overlap: オーバーラップ率 (0-1) - デフォルト0が最適
-        top_k: 各時刻で返すイベント数
-        threshold: 最小確率しきい値
+        audio_data: Audio data
+        sample_rate: Sampling rate
+        segment_duration: Segment length in seconds (default 10s)
+        overlap: Overlap ratio (0-1, default 0)
+        top_k: Number of events to return per segment
+        threshold: Minimum probability threshold
 
     Returns:
-        時系列分析結果
+        Timeline analysis results
     """
-    # モノラルに変換
-    if len(audio_data.shape) > 1:
-        audio_data = np.mean(audio_data, axis=1)
+    # Preprocess audio
+    processed_audio = process_audio(audio_data, sample_rate)
+    target_sr = feature_extractor.sampling_rate
 
-    # 32kHzにリサンプリング
-    if sample_rate != SAMPLING_RATE:
-        audio_data = librosa.resample(
-            y=audio_data,
-            orig_sr=sample_rate,
-            target_sr=SAMPLING_RATE
-        )
-        sample_rate = SAMPLING_RATE
-
-    # セグメント設定
-    segment_samples = int(segment_duration * sample_rate)
+    # Segment configuration
+    segment_samples = int(segment_duration * target_sr)
     hop_samples = int(segment_samples * (1 - overlap))
 
-    # タイムライン結果を格納
+    # Store timeline results
     timeline = []
     all_events = {}
 
-    # 音声が短い場合は全体を1セグメントとして処理
-    if len(audio_data) < segment_samples:
-        audio_tensor = torch.from_numpy(audio_data.astype(np.float32)).unsqueeze(0)
-        events = predict_audio_events(audio_tensor, top_k, threshold)
+    # Handle short audio (less than segment_duration)
+    if len(processed_audio) < segment_samples:
+        events = predict_audio_events(processed_audio, top_k, threshold)
         timeline.append({
             "time": 0.0,
             "events": events
@@ -437,24 +379,21 @@ def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
             all_events[label]["count"] += 1
             all_events[label]["total_score"] += event["score"]
     else:
-        # 通常のセグメント処理
-        for i in range(0, len(audio_data) - segment_samples + 1, hop_samples):
-            segment = audio_data[i:i + segment_samples]
-            time_position = i / sample_rate
+        # Normal segment processing
+        for i in range(0, len(processed_audio) - segment_samples + 1, hop_samples):
+            segment = processed_audio[i:i + segment_samples]
+            time_position = i / target_sr
 
-            # Tensorに変換
-            segment_tensor = torch.from_numpy(segment.astype(np.float32)).unsqueeze(0)
+            # Predict events for segment
+            events = predict_audio_events(segment, top_k, threshold)
 
-            # 予測
-            events = predict_audio_events(segment_tensor, top_k, threshold)
-
-            # タイムラインに追加
+            # Add to timeline
             timeline.append({
                 "time": round(time_position, 1),
                 "events": events
             })
 
-            # イベントの集計
+            # Aggregate events
             for event in events:
                 label = event["label"]
                 if label not in all_events:
@@ -462,7 +401,7 @@ def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
                 all_events[label]["count"] += 1
                 all_events[label]["total_score"] += event["score"]
 
-    # 最も頻繁なイベントを集計
+    # Get most common events
     most_common = []
     for label, stats in sorted(all_events.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
         most_common.append({
@@ -475,7 +414,7 @@ def analyze_timeline(audio_data: np.ndarray, sample_rate: int,
         "timeline": timeline,
         "summary": {
             "total_segments": len(timeline),
-            "duration_seconds": round(len(audio_data) / sample_rate, 1),
+            "duration_seconds": round(len(processed_audio) / target_sr, 1),
             "segment_duration": segment_duration,
             "overlap": overlap,
             "most_common_events": most_common
@@ -562,12 +501,12 @@ async def startup_event():
 
 @app.get("/")
 async def root():
-    """ルートエンドポイント"""
+    """Root endpoint"""
     return {
-        "message": "PaSST Audio Event Detection API with Supabase Integration",
+        "message": "AST Audio Event Detection API with Supabase Integration",
         "model": MODEL_NAME,
         "version": "3.0.0",
-        "sampling_rate": f"{SAMPLING_RATE} Hz (32kHz)",
+        "sampling_rate": f"{SAMPLING_RATE} Hz (16kHz)",
         "status": "ready" if model is not None else "not ready",
         "endpoints": {
             "/fetch-and-process-paths": "Process audio files from S3 via file paths",
@@ -577,7 +516,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """ヘルスチェックエンドポイント"""
+    """Health check endpoint"""
     return {
         "status": "healthy" if model is not None else "unhealthy",
         "model_loaded": model is not None,
@@ -651,9 +590,9 @@ async def fetch_and_process_paths(request: FetchAndProcessPathsRequest):
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("PaSST Audio Event Detection API with Supabase")
+    print("AST Audio Event Detection API with Supabase")
     print(f"Model: {MODEL_NAME}")
-    print(f"Sampling Rate: {SAMPLING_RATE} Hz (32kHz)")
+    print(f"Sampling Rate: {SAMPLING_RATE} Hz (16kHz)")
     print("=" * 50)
 
     uvicorn.run(
